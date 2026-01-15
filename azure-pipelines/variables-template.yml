@@ -1,0 +1,32 @@
+# Azure DevOps Variable Group Template
+# Create a variable group named 'cicd-poc-variables' in Azure DevOps with these variables:
+
+variables:
+  # Azure Service Connection
+  azureSubscriptionConnection: 'YOUR_AZURE_SERVICE_CONNECTION_NAME'
+  
+  # Azure Web App Names
+  devWebAppName: 'cicd-poc-dev'
+  stagingWebAppName: 'cicd-poc-staging'
+  productionWebAppName: 'cicd-poc-production'
+  
+  # Resource Group
+  resourceGroupName: 'rg-cicd-poc'
+  
+  # Azure Subscription
+  subscriptionId: 'YOUR_SUBSCRIPTION_ID'
+  
+  # Deployment Settings
+  deploymentTimeout: '300'  # seconds
+  healthCheckRetries: '10'
+  
+  # GitHub Integration (if needed)
+  githubServiceConnection: 'YOUR_GITHUB_SERVICE_CONNECTION'
+  githubRepository: 'YOUR_USERNAME/cicd-poc'
+
+# Instructions for setting up the variable group:
+# 1. Go to Azure DevOps -> Pipelines -> Library
+# 2. Create a new variable group named 'cicd-poc-variables'
+# 3. Add all the above variables with appropriate values
+# 4. Mark sensitive values (like connection strings) as secret
+# 5. Grant permissions to the pipeline to use this variable group

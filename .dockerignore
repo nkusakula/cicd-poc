@@ -1,0 +1,55 @@
+# .dockerignore
+# Exclude unnecessary files from Docker build context
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+docs/
+
+# CI/CD
+.github/
+azure-pipelines/
+scripts/
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+*.sln.docstates
+
+# Build outputs
+bin/
+obj/
+out/
+publish/
+
+# NuGet
+packages/
+*.nupkg
+*.snupkg
+
+# Logs
+logs/
+*.log
+
+# Environment files
+.env
+.env.local
+.env.staging
+.env.production
+
+# Testing
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# Temporary files
+*.tmp
+*.temp
+*~

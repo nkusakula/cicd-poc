@@ -1,0 +1,65 @@
+# Container deployment pipeline for Azure Container Apps
+# Alternative to Azure Web Apps deployment
+
+trigger: none
+pr: none
+
+variables:
+  - group: 'cicd-poc-variables'
+  - name: containerRegistry
+    value: 'cicdpocregistry.azurecr.io'
+  - name: imageName
+    value: 'cicd-poc'
+  - name: imageTag
+    value: '$(Build.BuildId)'
+
+stages:
+- stage: BuildContainer
+  displayName: 'Build Container Image'
+  jobs:
+  - job: BuildAndPush
+    displayName: 'Build and Push Container'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - task: Docker@2
+      displayName: 'Build container image'
+      inputs:
+        containerRegistry: '$(dockerRegistryConnection)'
+        repository: '$(imageName)'
+        command: 'build'
+        Dockerfile: 'Dockerfile'
+        tags: |
+          $(imageTag)
+          latest
+          
+    - task: Docker@2
+      displayName: 'Push container image'
+      inputs:
+        containerRegistry: '$(dockerRegistryConnection)'
+        repository: '$(imageName)'
+        command: 'push'
+        tags: |
+          $(imageTag)
+          latest
+
+- stage: DeployContainers
+  displayName: 'Deploy to Container Apps'
+  dependsOn: BuildContainer
+  jobs:
+  - deployment: DeployToContainerApps
+    displayName: 'Deploy to Azure Container Apps'
+    environment: 'cicd-poc-containers'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureContainerApps@1
+            displayName: 'Deploy to Container Apps'
+            inputs:
+              azureSubscription: '$(azureSubscriptionConnection)'
+              containerAppName: 'cicd-poc-app'
+              resourceGroup: '$(resourceGroupName)'
+              imageToDeploy: '$(containerRegistry)/$(imageName):$(imageTag)'
+              containerAppEnvironment: 'cicd-poc-env'

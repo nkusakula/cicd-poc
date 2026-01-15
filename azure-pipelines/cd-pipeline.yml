@@ -1,0 +1,226 @@
+# Azure DevOps Pipeline for Continuous Deployment
+# This pipeline deploys the artifacts created by GitHub Actions CI
+
+trigger: none  # This pipeline is triggered by external sources (GitHub Actions)
+
+pr: none
+
+variables:
+  # Pipeline variables - configure these in Azure DevOps
+  - group: 'cicd-poc-variables'  # Variable group containing sensitive values
+  - name: artifactName
+    value: 'cicd-poc-build'
+  - name: dotnetVersion
+    value: '9.0.x'
+
+stages:
+- stage: Deploy_Dev
+  displayName: 'Deploy to Development'
+  jobs:
+  - deployment: DeployToDev
+    displayName: 'Deploy to Development Environment'
+    environment: 'cicd-poc-dev'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: DownloadPipelineArtifact@2
+            displayName: 'Download Build Artifacts'
+            inputs:
+              buildType: 'specific'
+              project: '$(System.TeamProject)'
+              definition: '$(Build.DefinitionId)'
+              buildVersionToDownload: 'latest'
+              artifactName: '$(artifactName)'
+              targetPath: '$(Pipeline.Workspace)/drop'
+              
+          - task: UseDotNet@2
+            displayName: 'Install .NET SDK'
+            inputs:
+              packageType: 'sdk'
+              version: '$(dotnetVersion)'
+              
+          - task: AzureWebApp@1
+            displayName: 'Deploy to Azure Web App - Dev'
+            inputs:
+              azureSubscription: '$(azureSubscriptionConnection)'
+              appType: 'webApp'
+              appName: '$(devWebAppName)'
+              package: '$(Pipeline.Workspace)/drop'
+              deploymentMethod: 'auto'
+              
+          - task: PowerShell@2
+            displayName: 'Health Check - Dev'
+            inputs:
+              targetType: 'inline'
+              script: |
+                $healthUrl = "https://$(devWebAppName).azurewebsites.net/health"
+                Write-Host "Checking health at: $healthUrl"
+                
+                $maxAttempts = 10
+                $attempt = 1
+                
+                do {
+                  try {
+                    $response = Invoke-RestMethod -Uri $healthUrl -Method Get -TimeoutSec 30
+                    if ($response.status -eq "healthy") {
+                      Write-Host "✅ Health check passed!"
+                      Write-Host "Response: $($response | ConvertTo-Json)"
+                      exit 0
+                    }
+                  }
+                  catch {
+                    Write-Host "❌ Health check attempt $attempt failed: $($_.Exception.Message)"
+                  }
+                  
+                  if ($attempt -lt $maxAttempts) {
+                    Write-Host "⏳ Waiting 10 seconds before retry..."
+                    Start-Sleep -Seconds 10
+                  }
+                  
+                  $attempt++
+                } while ($attempt -le $maxAttempts)
+                
+                Write-Host "❌ Health check failed after $maxAttempts attempts"
+                exit 1
+
+- stage: Deploy_Staging
+  displayName: 'Deploy to Staging'
+  dependsOn: Deploy_Dev
+  condition: succeeded()
+  jobs:
+  - deployment: DeployToStaging
+    displayName: 'Deploy to Staging Environment'
+    environment: 'cicd-poc-staging'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: DownloadPipelineArtifact@2
+            displayName: 'Download Build Artifacts'
+            inputs:
+              buildType: 'specific'
+              project: '$(System.TeamProject)'
+              definition: '$(Build.DefinitionId)'
+              buildVersionToDownload: 'latest'
+              artifactName: '$(artifactName)'
+              targetPath: '$(Pipeline.Workspace)/drop'
+              
+          - task: UseDotNet@2
+            displayName: 'Install .NET SDK'
+            inputs:
+              packageType: 'sdk'
+              version: '$(dotnetVersion)'
+              
+          - task: AzureWebApp@1
+            displayName: 'Deploy to Azure Web App - Staging'
+            inputs:
+              azureSubscription: '$(azureSubscriptionConnection)'
+              appType: 'webApp'
+              appName: '$(stagingWebAppName)'
+              package: '$(Pipeline.Workspace)/drop'
+              deploymentMethod: 'auto'
+              
+          - task: PowerShell@2
+            displayName: 'Smoke Tests - Staging'
+            inputs:
+              targetType: 'inline'
+              script: |
+                $baseUrl = "https://$(stagingWebAppName).azurewebsites.net"
+                Write-Host "Running smoke tests against: $baseUrl"
+                
+                # Test endpoints
+                $endpoints = @("/", "/health", "/api/products", "/api/info")
+                $failed = $false
+                
+                foreach ($endpoint in $endpoints) {
+                  try {
+                    $url = "$baseUrl$endpoint"
+                    Write-Host "Testing: $url"
+                    $response = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 30
+                    Write-Host "✅ $endpoint - OK"
+                  }
+                  catch {
+                    Write-Host "❌ $endpoint - Failed: $($_.Exception.Message)"
+                    $failed = $true
+                  }
+                }
+                
+                if ($failed) {
+                  Write-Host "❌ Smoke tests failed"
+                  exit 1
+                } else {
+                  Write-Host "✅ All smoke tests passed"
+                }
+
+- stage: Deploy_Production
+  displayName: 'Deploy to Production'
+  dependsOn: Deploy_Staging
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  jobs:
+  - deployment: DeployToProduction
+    displayName: 'Deploy to Production Environment'
+    environment: 'cicd-poc-production'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: DownloadPipelineArtifact@2
+            displayName: 'Download Build Artifacts'
+            inputs:
+              buildType: 'specific'
+              project: '$(System.TeamProject)'
+              definition: '$(Build.DefinitionId)'
+              buildVersionToDownload: 'latest'
+              artifactName: '$(artifactName)'
+              targetPath: '$(Pipeline.Workspace)/drop'
+              
+          - task: UseDotNet@2
+            displayName: 'Install .NET SDK'
+            inputs:
+              packageType: 'sdk'
+              version: '$(dotnetVersion)'
+              
+          - task: AzureWebApp@1
+            displayName: 'Deploy to Azure Web App - Production'
+            inputs:
+              azureSubscription: '$(azureSubscriptionConnection)'
+              appType: 'webApp'
+              appName: '$(productionWebAppName)'
+              package: '$(Pipeline.Workspace)/drop'
+              deploymentMethod: 'auto'
+              
+          - task: PowerShell@2
+            displayName: 'Production Health Check'
+            inputs:
+              targetType: 'inline'
+              script: |
+                $healthUrl = "https://$(productionWebAppName).azurewebsites.net/health"
+                Write-Host "Production health check: $healthUrl"
+                
+                $maxAttempts = 15
+                $attempt = 1
+                
+                do {
+                  try {
+                    $response = Invoke-RestMethod -Uri $healthUrl -Method Get -TimeoutSec 30
+                    if ($response.status -eq "healthy") {
+                      Write-Host "🎉 Production deployment successful!"
+                      Write-Host "Health Status: $($response | ConvertTo-Json)"
+                      exit 0
+                    }
+                  }
+                  catch {
+                    Write-Host "❌ Production health check attempt $attempt failed: $($_.Exception.Message)"
+                  }
+                  
+                  if ($attempt -lt $maxAttempts) {
+                    Write-Host "⏳ Waiting 15 seconds before retry..."
+                    Start-Sleep -Seconds 15
+                  }
+                  
+                  $attempt++
+                } while ($attempt -le $maxAttempts)
+                
+                Write-Host "🚨 CRITICAL: Production health check failed after $maxAttempts attempts"
+                exit 1

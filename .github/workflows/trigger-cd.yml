@@ -1,0 +1,105 @@
+name: Trigger Azure DevOps CD Pipeline
+
+on:
+  workflow_run:
+    workflows: ["CI - Build and Test"]
+    types:
+      - completed
+    branches:
+      - main
+
+env:
+  AZURE_DEVOPS_ORG: 'YOUR_ORG'  # Replace with your Azure DevOps organization
+  AZURE_DEVOPS_PROJECT: 'CicdPoc'  # Replace with your project name
+  PIPELINE_ID: 'YOUR_PIPELINE_ID'  # Replace with your CD pipeline ID
+
+jobs:
+  trigger-cd:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    
+    steps:
+    - name: Trigger Azure DevOps CD Pipeline
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const { Octokit } = require('@octokit/rest');
+          
+          // Get the build artifacts info
+          const buildNumber = '${{ github.event.workflow_run.run_number }}';
+          const commitSha = '${{ github.event.workflow_run.head_sha }}';
+          
+          console.log(`Triggering CD pipeline for build: ${buildNumber}, commit: ${commitSha}`);
+          
+          // Trigger Azure DevOps pipeline via REST API
+          const response = await fetch(
+            `https://dev.azure.com/${process.env.AZURE_DEVOPS_ORG}/${process.env.AZURE_DEVOPS_PROJECT}/_apis/pipelines/${process.env.PIPELINE_ID}/runs?api-version=7.0`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Basic ${Buffer.from(':' + '${{ secrets.AZURE_DEVOPS_PAT }}').toString('base64')}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                resources: {
+                  repositories: {
+                    self: {
+                      refName: 'refs/heads/main'
+                    }
+                  }
+                },
+                variables: {
+                  'githubBuildNumber': {
+                    value: buildNumber
+                  },
+                  'githubCommitSha': {
+                    value: commitSha
+                  }
+                }
+              })
+            }
+          );
+          
+          if (response.ok) {
+            const result = await response.json();
+            console.log('✅ Successfully triggered Azure DevOps CD pipeline');
+            console.log(`Pipeline run ID: ${result.id}`);
+            console.log(`Pipeline run URL: ${result.url}`);
+            
+            // Add GitHub deployment status
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: result.id,
+              state: 'pending',
+              description: 'Azure DevOps CD pipeline started',
+              environment: 'production'
+            });
+          } else {
+            const error = await response.text();
+            console.error('❌ Failed to trigger Azure DevOps CD pipeline');
+            console.error(`Status: ${response.status}`);
+            console.error(`Error: ${error}`);
+            process.exit(1);
+          }
+
+  notify-teams:
+    runs-on: ubuntu-latest
+    needs: trigger-cd
+    if: always()
+    
+    steps:
+    - name: Notify deployment status
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const status = '${{ needs.trigger-cd.result }}';
+          const buildNumber = '${{ github.event.workflow_run.run_number }}';
+          
+          if (status === 'success') {
+            console.log('🚀 CD pipeline triggered successfully');
+            // Add your notification logic here (Slack, Teams, etc.)
+          } else {
+            console.log('❌ Failed to trigger CD pipeline');
+            // Add your error notification logic here
+          }

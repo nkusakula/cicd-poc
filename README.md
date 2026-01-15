@@ -1,6 +1,17 @@
 # CI/CD POC Application
 
-This is a sample .NET 8 Web API application designed to demonstrate a hybrid CI/CD pipeline using GitHub Actions for Continuous Integration and Azure DevOps for Continuous Deployment.
+This is a sample .NET 9.0 Web API application designed to demonstrate a **hybrid CI/CD pipeline** using GitHub Actions for Continuous Integration and Azure DevOps for Continuous Deployment.
+
+## 🏗️ Architecture Overview
+
+```
+Developer → GitHub → GitHub Actions (CI) → Artifacts → Azure DevOps (CD) → Azure Web Apps
+```
+
+### Hybrid CI/CD Benefits
+- **GitHub Actions**: Fast, integrated CI with excellent GitHub ecosystem
+- **Azure DevOps**: Enterprise-grade deployment pipelines with advanced approval workflows
+- **Best of Both Worlds**: Leverage strengths of both platforms
 
 ## Features
 
@@ -13,8 +24,11 @@ This is a sample .NET 8 Web API application designed to demonstrate a hybrid CI/
 
 ### Prerequisites
 
-- .NET 8.0 SDK
+- .NET 9.0 SDK
 - Visual Studio 2022 or VS Code
+- Azure CLI (for Azure resource setup)
+- Azure DevOps account
+- GitHub account
 
 ### Running the Application
 
@@ -40,11 +54,38 @@ dotnet test
 
 - `GET /` - Welcome message with application info
 - `GET /health` - Health check endpoint
-- `GET /api/products` - Returns sample product data
-- `GET /api/info` - Returns detailed application information
+- `🚀 CI/CD Pipeline Setup
 
-## CI/CD Pipeline
+This application implements a hybrid CI/CD pipeline:
 
+### 📋 **Quick Start**
+1. **Set up Azure resources**: Run `scripts/setup-azure-resources.ps1`
+2. **Configure Azure DevOps**: Follow `docs/pipeline-setup.md`
+3. **Push to main branch**: Pipeline will automatically deploy
+
+### 🔄 **Pipeline Flow**
+1. **CI (GitHub Actions)**:
+   - Build & test .NET application
+   - Run security scans (CodeQL, vulnerability checks)  
+   - Create deployment artifacts
+   - Upload to GitHub Actions artifacts
+
+2. **CD (Azure DevOps)**:
+   - Download artifacts from GitHub Actions
+   - Deploy to Development → Staging → Production
+   - Run health checks and smoke tests
+   - Manual approval gates for production
+
+### 🌐 **Deployment Environments**
+- **Development**: `https://cicd-poc-dev.azurewebsites.net`
+- **Staging**: `https://cicd-poc-staging.azurewebsites.net`  
+- **Production**: `https://cicd-poc-production.azurewebsites.net`
+
+### 📁 **Pipeline Files**
+- `.github/workflows/ci.yml` - GitHub Actions CI pipeline
+- `azure-pipelines/cd-pipeline.yml` - Azure DevOps CD pipeline
+- `scripts/setup-azure-resources.ps1` - Azure resource setup script
+- `docs/pipeline-setup.md` - Complete setup guide
 This application is configured for:
 - **CI**: GitHub Actions for building, testing, and packaging
 - **CD**: Azure DevOps Pipelines for deployment orchestration
